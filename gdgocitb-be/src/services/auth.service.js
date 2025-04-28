@@ -1,5 +1,6 @@
-import User from '../models/User.js';
+import { prisma } from '../config/index.js';
 import logger from '../utils/logger.js';
+import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
 
 /**
@@ -9,9 +10,6 @@ import { config } from '../config/index.js';
  */
 export const checkMemberWhitelist = async (email) => {
   try {
-    // In a real implementation, this could check against a database of approved emails
-    // For this example, we'll use a simple array of whitelisted domains and emails
-    
     // Define whitelist
     const whitelistedDomains = ['itb.ac.id']; // ITB domain
     const whitelistedEmails = [
@@ -33,10 +31,14 @@ export const checkMemberWhitelist = async (email) => {
       return true;
     }
     
-    // If we have an admin database, check there too
-    const adminUser = await User.findOne({
-      email,
-      access: { $in: ['Curriculum Admin', 'Professional Development Admin', 'Technical Admin'] }
+    // If we have an admin in database, check there too
+    const adminUser = await prisma.user.findFirst({
+      where: {
+        email,
+        access: {
+          in: ['CurriculumAdmin', 'ProfessionalDevelopmentAdmin', 'TechnicalAdmin']
+        }
+      }
     });
     
     return !!adminUser;
@@ -62,7 +64,9 @@ export const loginWithGoogle = async (payload) => {
     }
     
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await prisma.user.findUnique({
+      where: { email }
+    });
     
     // If user doesn't exist, create a new one
     if (!user) {
@@ -74,17 +78,21 @@ export const loginWithGoogle = async (payload) => {
       }
       
       // Create new user as Member
-      user = new User({
-        name,
-        email,
-        access: 'Member'
+      user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          access: 'Member'
+        }
       });
-      
-      await user.save();
     }
     
     // Generate JWT token
-    const token = user.getSignedJwtToken();
+    const token = jwt.sign(
+      { id: user.id, access: user.access },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
     
     return { user, token };
   } catch (error) {
@@ -109,19 +117,25 @@ export const registerBuddy = async (buddyData) => {
     }
     
     // Check if email is already registered as buddy
-    const existingBuddy = await User.findOne({ email, access: 'Buddy' });
+    const existingBuddy = await prisma.user.findFirst({
+      where: {
+        email,
+        access: 'Buddy'
+      }
+    });
+    
     if (existingBuddy) {
       throw new Error('This email is already registered as a Buddy. Please login directly.');
     }
     
     // Create new buddy user
-    const buddy = new User({
-      name,
-      email,
-      access: 'Buddy'
+    const buddy = await prisma.user.create({
+      data: {
+        name,
+        email,
+        access: 'Buddy'
+      }
     });
-    
-    await buddy.save();
     
     return buddy;
   } catch (error) {

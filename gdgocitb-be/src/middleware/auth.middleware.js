@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
+import { config, prisma } from '../config/index.js';
 import { unauthorizedResponse, forbiddenResponse } from '../utils/response.js';
-import User from '../models/User.js';
 
 /**
  * Protect routes - verify token
@@ -31,7 +30,9 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, config.jwt.secret);
 
     // Cari user berdasarkan id
-    const user = await User.findById(decoded.id).select('-password');
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
 
     if (!user) {
       return unauthorizedResponse(res, 'Not authorized, user not found');
@@ -47,7 +48,7 @@ export const protect = async (req, res, next) => {
 
 /**
  * Authorize by access level
- * @param  {...String} accessLevels - Required access levels (Member, Buddy, Professional Development Admin, etc)
+ * @param  {...String} accessLevels - Required access levels (Member, Buddy, CurriculumAdmin, etc)
  * @returns {Function} - Express middleware function
  */
 export const authorize = (...accessLevels) => {

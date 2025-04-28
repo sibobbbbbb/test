@@ -1,9 +1,9 @@
-import { loginWithGoogle, checkMemberWhitelist } from '../services/auth.service.js';
+import { loginWithGoogle, checkMemberWhitelist, registerBuddy } from '../services/auth.service.js';
 import { successResponse, errorResponse, unauthorizedResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 import { OAuth2Client } from 'google-auth-library';
-import { config } from '../config/index.js';
-import User from '../models/User.js';
+import { config, prisma } from '../config/index.js';
+import jwt from 'jsonwebtoken';
 
 // Cookie settings yang sudah ditingkatkan
 const COOKIE_OPTIONS = {
@@ -41,9 +41,16 @@ const googleAuth = async (req, res) => {
     // Check if email is in member whitelist
     const isMember = await checkMemberWhitelist(payload.email);
     logger.info(`User ${payload.email} is ${isMember ? 'a member' : 'not a member'}`);
+    
     if (!isMember) {
       // Check if email is registered as buddy
-      const buddy = await User.findOne({ email: payload.email, access: 'Buddy' });
+      const buddy = await prisma.user.findFirst({
+        where: { 
+          email: payload.email, 
+          access: 'Buddy'
+        }
+      });
+      
       logger.info(`Buddy ${buddy ? 'found' : 'not found'}`);
       if (!buddy) {
         // Not a member and not a buddy - need to register first
@@ -63,7 +70,7 @@ const googleAuth = async (req, res) => {
     
     // Tambahkan cookie untuk user data (non-sensitive)
     const userData = {
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       access: user.access
@@ -108,19 +115,26 @@ const registerBuddyUser = async (req, res) => {
     }
     
     // Check if email is already registered as buddy
-    const existingBuddy = await User.findOne({ email, access: 'Buddy' });
+    const existingBuddy = await prisma.user.findFirst({
+      where: {
+        email,
+        access: 'Buddy'
+      }
+    });
+    
     if (existingBuddy) {
       return errorResponse(res, 400, 'This email is already registered as a Buddy. Please login directly.');
     }
     
     // Create new buddy user
-    const buddy = new User({
-      name,
-      email,
-      access: 'Buddy'
+    const buddy = await prisma.user.create({
+      data: {
+        name,
+        email,
+        access: 'Buddy'
+      }
     });
     
-    await buddy.save();
     logger.info(`Buddy registered successfully: ${email}`);
     
     return successResponse(res, 201, 'Registration successful. You can now login with Google.', {
@@ -143,13 +157,19 @@ const getMe = async (req, res) => {
     
     logger.info(`getMe called for user: ${user.email}`);
     
+    // Generate token for refreshing session
+    const token = jwt.sign(
+      { id: user.id, access: user.access },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
+    
     // Refresh cookies to extend session
-    const token = user.getSignedJwtToken();
     res.cookie('gdgoc_auth_token', token, COOKIE_OPTIONS);
     
     // Refresh user data cookie
     const userData = {
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       access: user.access
@@ -164,7 +184,7 @@ const getMe = async (req, res) => {
     
     return successResponse(res, 200, 'User fetched successfully', {
       user: userData,
-      token // Include token in response
+      token
     });
   } catch (error) {
     logger.error(`Error in getMe: ${error.message}`);
@@ -180,7 +200,7 @@ const getMe = async (req, res) => {
 const registerAdminUser = async (req, res) => {
   try {
     // Pastikan yang request adalah admin
-    if (!['Curriculum Admin', 'Professional Development Admin', 'Technical Admin'].includes(req.user.access)) {
+    if (!['CurriculumAdmin', 'ProfessionalDevelopmentAdmin', 'TechnicalAdmin'].includes(req.user.access)) {
       return unauthorizedResponse(res, 'Not authorized to register admin');
     }
     
@@ -192,26 +212,33 @@ const registerAdminUser = async (req, res) => {
     }
     
     // Check if email is already registered
-    const existingUser = await User.findOne({ email });
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+    
     if (existingUser) {
       return errorResponse(res, 400, 'Email already registered');
     }
     
     // Create new admin user
-    const admin = new User({
-      name,
-      email,
-      access: adminType
+    const admin = await prisma.user.create({
+      data: {
+        name,
+        email,
+        access: adminType
+      }
     });
     
-    await admin.save();
-    
     // Generate token
-    const token = admin.getSignedJwtToken();
+    const token = jwt.sign(
+      { id: admin.id, access: admin.access },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn }
+    );
     
     return successResponse(res, 201, 'Admin registered successfully', {
       admin: {
-        id: admin._id,
+        id: admin.id,
         name: admin.name,
         email: admin.email,
         access: admin.access

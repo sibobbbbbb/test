@@ -1,116 +1,281 @@
-import Module from '../models/Module.js';
+import { prisma } from '../config/index.js';
 import { successResponse, errorResponse } from '../utils/response.js';
-import { handleSingleUpload, handleMultipleUpload } from '../middleware/upload.middleware.js';
-import ProblemSet from '../models/ProblemSet.js';
+import logger from '../utils/logger.js';
 
 export const getProblemSets = async (req, res) => {
     try {
-        const problemSets = await ProblemSet.find();
-        return successResponse(res, problemSets);
+        const moduleId = req.params.id; 
+        
+        const filters = {};
+        if (moduleId) {
+            filters.where = { moduleId };
+        }
+        
+        const problemSets = await prisma.problemSet.findMany(filters);
+        return successResponse(res, 200, 'Success retrieving problem sets', problemSets);
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error getting problem sets: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const getProblemSet = async (req, res) => {
     try {
         const problemSetId = req.params.id;
-        const module = await Module.findOne({ 'problemSets._id': problemSetId }).populate('problemSets');
-        if (!module) {
-            return res.status(404).json({ message: "Problem Set not found" });
+        const problemSet = await prisma.problemSet.findUnique({
+            where: { id: problemSetId },
+            include: {
+                module: true,
+                submissions: {
+                    where: { userId: req.user.id },
+                    orderBy: { submittedAt: 'desc' },
+                    take: 1
+                }
+            }
+        });
+        
+        if (!problemSet) {
+            return errorResponse(res, 404, "Problem Set not found");
         }
-        const problemSet = module.problemSets.id(problemSetId);
-        return successResponse(res, problemSet);
+        return successResponse(res, 200, 'Success retrieving problem set', problemSet);
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error getting problem set: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const createProblemSet = async (req, res) => {
     try {
-        const moduleId = req.params.id;
-        const { title, description, video, order } = req.body;
-        const newProblemSet = { title, description, video, order };
+        const { 
+            moduleId, 
+            problemSetTitle, 
+            description, 
+            submissionType, 
+            accessLevel, 
+            deadline, 
+            maxGrade, 
+            passingGrade, 
+            isManualGrading, 
+            order 
+        } = req.body;
         
-        const module = await Module.findById(moduleId);
-        if (!module) {
-            return res.status(404).json({ message: "Module not found" });
+        // Periksa apakah module ada
+        const moduleExists = await prisma.module.findUnique({
+            where: { id: moduleId }
+        });
+        
+        if (!moduleExists) {
+            return errorResponse(res, 404, "Module not found");
         }
         
-        module.problemSets.push(newProblemSet);
-        await module.save();
+        // Tambahkan video file jika ada di request
+        let video = null;
+        if (req.fileData) {
+            video = req.fileData.url;
+        }
         
-        return res.status(201).json({ success: true, data: newProblemSet });
+        const newProblemSet = await prisma.problemSet.create({
+            data: {
+                moduleId,
+                problemSetTitle,
+                description,
+                video,
+                submissionType,
+                accessLevel: accessLevel || 'Member',
+                deadline: deadline ? new Date(deadline) : null,
+                maxGrade: maxGrade || 100,
+                passingGrade: passingGrade || 60,
+                isManualGrading: isManualGrading || false,
+                order: order || 0
+            }
+        });
+        
+        return successResponse(res, 201, 'Problem set created successfully', newProblemSet);
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error creating problem set: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const updateProblemSet = async (req, res) => {
     try {
-        const moduleId = req.params.id;
-        const problemSetId = req.params.problemSetId;
-        const { title, description, video, order } = req.body;
+        const problemSetId = req.params.id;
+        const {
+            moduleId,
+            problemSetTitle,
+            description,
+            submissionType,
+            accessLevel,
+            deadline,
+            maxGrade,
+            passingGrade,
+            isManualGrading,
+            order
+        } = req.body;
         
-        const module = await Module.findById(moduleId);
-        if (!module) {
-            return res.status(404).json({ message: "Module not found" });
+        // Periksa apakah problem set ada
+        const problemSetExists = await prisma.problemSet.findUnique({
+            where: { id: problemSetId }
+        });
+        
+        if (!problemSetExists) {
+            return errorResponse(res, 404, "Problem Set not found");
         }
         
-        const problemSet = module.problemSets.id(problemSetId);
-        if (!problemSet) {
-            return res.status(404).json({ message: "Problem Set not found" });
+        // Update data
+        const updateData = {
+            moduleId,
+            problemSetTitle,
+            description,
+            submissionType,
+            accessLevel,
+            deadline: deadline ? new Date(deadline) : problemSetExists.deadline,
+            maxGrade,
+            passingGrade,
+            isManualGrading,
+            order
+        };
+        
+        // Filter undefined values
+        Object.keys(updateData).forEach(key => {
+            if (updateData[key] === undefined) {
+                delete updateData[key];
+            }
+        });
+        
+        // Update video jika ada file baru
+        if (req.fileData) {
+            updateData.video = req.fileData.url;
         }
         
-        problemSet.title = title || problemSet.title;
-        problemSet.description = description || problemSet.description;
-        problemSet.video = video || problemSet.video;
-        problemSet.order = order || problemSet.order;
+        const updatedProblemSet = await prisma.problemSet.update({
+            where: { id: problemSetId },
+            data: updateData
+        });
         
-        await module.save();
-        
-        return successResponse(res, problemSet);
+        return successResponse(res, 200, 'Problem set updated successfully', updatedProblemSet);
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error updating problem set: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const deleteProblemSet = async (req, res) => {
     try {
-        const moduleId = req.params.id;
-        const problemSetId = req.params.problemSetId;
+        const problemSetId = req.params.id;
         
-        const module = await Module.findById(moduleId);
-        if (!module) {
-            return res.status(404).json({ message: "Module not found" });
+        // Periksa apakah problem set ada
+        const problemSetExists = await prisma.problemSet.findUnique({
+            where: { id: problemSetId }
+        });
+        
+        if (!problemSetExists) {
+            return errorResponse(res, 404, "Problem Set not found");
         }
         
-        const problemSet = module.problemSets.id(problemSetId);
-        if (!problemSet) {
-            return res.status(404).json({ message: "Problem Set not found" });
-        }
+        // Hapus semua submissions terkait dulu
+        await prisma.problemSetSubmission.deleteMany({
+            where: { problemSetId }
+        });
         
-        problemSet.remove();
-        await module.save();
+        // Hapus problem set
+        const deletedProblemSet = await prisma.problemSet.delete({
+            where: { id: problemSetId }
+        });
         
-        return successResponse(res, problemSet);
+        return successResponse(res, 200, 'Problem set deleted successfully', deletedProblemSet);
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error deleting problem set: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const submitProblemSet = async (req, res) => {
     try {
         const problemSetId = req.params.id;
-        const { solution } = req.body;
+        const userId = req.user.id;
+        const { submissionLink } = req.body;
         
-        // Logic to handle submission (e.g., save to database, send email, etc.)
+        // Periksa apakah problem set ada
+        const problemSet = await prisma.problemSet.findUnique({
+            where: { id: problemSetId }
+        });
         
-        return res.status(201).json({ success: true, message: "Problem Set submitted successfully", data: solution });
+        if (!problemSet) {
+            return errorResponse(res, 404, "Problem Set not found");
+        }
+        
+        // Periksa apakah sudah melewati deadline
+        if (problemSet.deadline && new Date(problemSet.deadline) < new Date()) {
+            return errorResponse(res, 400, "Submission deadline has passed");
+        }
+        
+        // Periksa jenis submission
+        let submissionUrl = null;
+        
+        if (problemSet.submissionType === 'Link') {
+            // Validasi link submission
+            if (!submissionLink) {
+                return errorResponse(res, 400, "Submission link is required");
+            }
+            submissionUrl = submissionLink;
+        } else if (['File', 'Image', 'GOCI'].includes(problemSet.submissionType)) {
+            // Jika menggunakan file upload, periksa apakah file ada
+            if (!req.fileData) {
+                return errorResponse(res, 400, "File submission is required");
+            }
+            submissionUrl = req.fileData.url;
+        }
+        
+        // Cek apakah sudah ada submission sebelumnya
+        const existingSubmission = await prisma.problemSetSubmission.findFirst({
+            where: {
+                userId,
+                problemSetId
+            }
+        });
+        
+        let submission;
+        
+        if (existingSubmission) {
+            // Update submission yang sudah ada
+            submission = await prisma.problemSetSubmission.update({
+                where: { id: existingSubmission.id },
+                data: {
+                    submissionUrl,
+                    submittedAt: new Date(),
+                    // Jika grading otomatis, menetapkan grade default
+                    grade: problemSet.isManualGrading ? existingSubmission.grade : 0,
+                    gradedAt: problemSet.isManualGrading ? existingSubmission.gradedAt : null
+                }
+            });
+            
+            logger.info(`Updated submission for problem set ${problemSetId} by user ${userId}`);
+        } else {
+            // Buat submission baru
+            submission = await prisma.problemSetSubmission.create({
+                data: {
+                    userId,
+                    problemSetId,
+                    submissionUrl,
+                    grade: 0, // Default grade
+                    submittedAt: new Date()
+                }
+            });
+            
+            logger.info(`Created new submission for problem set ${problemSetId} by user ${userId}`);
+            
+            // Update path progress jika belum ada
+            await updateUserProgress(userId, problemSetId);
+        }
+        
+        return successResponse(res, 200, 'Submission successful', submission);
+        
     } catch (error) {
-        return errorResponse(res, error.message);
+        logger.error(`Error submitting problem set: ${error.message}`);
+        return errorResponse(res, 500, error.message);
     }
-}
+};
 
 export const gradeProblemSet = async (req, res) => {
     try {
