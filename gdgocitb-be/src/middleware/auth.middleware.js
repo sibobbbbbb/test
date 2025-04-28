@@ -30,7 +30,7 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, config.jwt.secret);
 
     // Cari user berdasarkan id
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: decoded.id }
     });
 

@@ -1,9 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
-  output   = "./node_modules/@prisma/client"
 }
 
 datasource db {
@@ -11,25 +7,178 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Tabel User
-model User {
-  id                 Int                  @id @default(autoincrement())
-  name               String
-  email              String               @unique
-  access             UserAccess
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  
-  // Relasi
-  pathProgresses     PathProgress[]
-  certificatesEarned Certificate[]
-  eventAttendees     EventAttendee[]
+model Users {
+  id                    Int                    @id @default(autoincrement())
+  name                  String
+  email                 String                 @unique
+  access                UserAccess
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @default(now()) @updatedAt
+  certificatesEarned    Certificate[]
+  eventAttendees        EventAttendee[]
+  pathProgresses        PathProgress[]
   problemSetSubmissions ProblemSetSubmission[]
-  
+
   @@map("users")
 }
 
-// Enum untuk tipe akses pengguna
+model Path {
+  id             Int            @id @default(autoincrement())
+  pathName       String
+  description    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  certificates   Certificate[]
+  modules        Module[]
+  pathProgresses PathProgress[]
+
+  @@map("paths")
+}
+
+model Module {
+  id               Int              @id @default(autoincrement())
+  pathId           Int
+  moduleName       String
+  description      String?
+  video            String?
+  order            Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  lectures         Lecture[]
+  moduleProgresses ModuleProgress[]
+  path             Path             @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  problemSets      ProblemSet[]
+
+  @@map("modules")
+}
+
+model Lecture {
+  id          Int         @id @default(autoincrement())
+  moduleId    Int
+  title       String
+  notes       String?
+  slides      String?
+  sourceCode  String?
+  order       Int         @default(0)
+  accessLevel AccessLevel @default(Member)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  module      Module      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("lectures")
+}
+
+model ProblemSet {
+  id              Int                    @id @default(autoincrement())
+  moduleId        Int
+  problemSetTitle String
+  description     String?
+  video           String?
+  submissionType  SubmissionType
+  accessLevel     AccessLevel            @default(Member)
+  deadline        DateTime?
+  maxGrade        Int                    @default(100)
+  passingGrade    Int                    @default(60)
+  isManualGrading Boolean                @default(false)
+  order           Int                    @default(0)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  submissions     ProblemSetSubmission[]
+  module          Module                 @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("problem_sets")
+}
+
+model ProblemSetSubmission {
+  id            Int        @id @default(autoincrement())
+  userId        Int
+  problemSetId  Int
+  submissionUrl String?
+  grade         Int        @default(0)
+  submittedAt   DateTime   @default(now())
+  gradedAt      DateTime?
+  problemSet    ProblemSet @relation(fields: [problemSetId], references: [id], onDelete: Cascade)
+  user          Users       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemSetId])
+  @@map("problem_set_submissions")
+}
+
+model PathProgress {
+  id               Int              @id @default(autoincrement())
+  userId           Int
+  pathId           Int
+  moduleProgresses ModuleProgress[]
+  path             Path             @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  user             Users             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pathId])
+  @@map("path_progresses")
+}
+
+model ModuleProgress {
+  id             Int          @id @default(autoincrement())
+  pathProgressId Int
+  moduleId       Int
+  completed      Boolean      @default(false)
+  completedAt    DateTime?
+  module         Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  pathProgress   PathProgress @relation(fields: [pathProgressId], references: [id], onDelete: Cascade)
+
+  @@unique([pathProgressId, moduleId])
+  @@map("module_progresses")
+}
+
+model Certificate {
+  id              Int             @id @default(autoincrement())
+  userId          Int
+  pathId          Int
+  certificateType CertificateType
+  name            String
+  issueDate       DateTime        @default(now())
+  certificateUrl  String?
+  certificateId   String          @unique
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  path            Path            @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  user            Users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
+
+model Event {
+  id          Int              @id @default(autoincrement())
+  title       String
+  subtitle    String?
+  category    EventCategory
+  description String?
+  location    String?
+  date        DateTime
+  timeStart   String
+  timeEnd     String
+  accessLevel EventAccessLevel @default(Member)
+  capacity    Int?
+  eventType   EventType
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  attendees   EventAttendee[]
+
+  @@map("events")
+}
+
+model EventAttendee {
+  id       Int     @id @default(autoincrement())
+  userId   Int
+  eventId  Int
+  rsvp     Boolean @default(false)
+  attended Boolean @default(false)
+  event    Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("event_attendees")
+}
+
 enum UserAccess {
   Member
   Buddy
@@ -38,104 +187,6 @@ enum UserAccess {
   TechnicalAdmin
 }
 
-// Tabel Path (Jalur Pembelajaran)
-model Path {
-  id          Int       @id @default(autoincrement())
-  pathName    String
-  description String?   @db.Text
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relasi
-  modules     Module[]
-  certificates Certificate[]
-  pathProgresses PathProgress[]
-  
-  @@map("paths")
-}
-
-// Tabel Module
-model Module {
-  id          Int       @id @default(autoincrement())
-  pathId      Int
-  moduleName  String
-  description String?   @db.Text
-  video       String?
-  order       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relasi
-  path        Path      @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  lectures    Lecture[]
-  problemSets ProblemSet[]
-  moduleProgresses ModuleProgress[]
-  
-  @@map("modules")
-}
-
-// Tabel Lecture (Materi Pembelajaran)
-model Lecture {
-  id          Int       @id @default(autoincrement())
-  moduleId    Int
-  title       String
-  notes       String?   @db.Text
-  slides      String?
-  sourceCode  String?
-  order       Int       @default(0)
-  accessLevel AccessLevel @default(Member)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relasi
-  module      Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  
-  @@map("lectures")
-}
-
-// Tabel ProblemSet (Tugas)
-model ProblemSet {
-  id              Int       @id @default(autoincrement())
-  moduleId        Int
-  problemSetTitle String
-  description     String?   @db.Text
-  video           String?
-  submissionType  SubmissionType
-  accessLevel     AccessLevel @default(Member)
-  deadline        DateTime?
-  maxGrade        Int       @default(100)
-  passingGrade    Int       @default(60)
-  isManualGrading Boolean   @default(false)
-  order           Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relasi
-  module          Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  submissions     ProblemSetSubmission[]
-  
-  @@map("problem_sets")
-}
-
-// Tabel ProblemSetSubmission (Pengumpulan Tugas)
-model ProblemSetSubmission {
-  id            Int       @id @default(autoincrement())
-  userId        Int
-  problemSetId  Int
-  submissionUrl String?
-  grade         Int       @default(0)
-  submittedAt   DateTime  @default(now())
-  gradedAt      DateTime?
-  
-  // Relasi
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  problemSet   ProblemSet @relation(fields: [problemSetId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, problemSetId])
-  @@map("problem_set_submissions")
-}
-
-// Enum untuk tipe submission
 enum SubmissionType {
   File
   Link
@@ -143,99 +194,21 @@ enum SubmissionType {
   GOCI
 }
 
-// Enum untuk level akses
 enum AccessLevel {
   Member
   Buddy
 }
 
-// Tabel PathProgress (Progres Pembelajaran User pada Path)
-model PathProgress {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  pathId    Int
-  
-  // Relasi
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  path      Path      @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  moduleProgresses ModuleProgress[]
-  
-  @@unique([userId, pathId])
-  @@map("path_progresses")
-}
-
-// Tabel ModuleProgress (Progres Pembelajaran User pada Module)
-model ModuleProgress {
-  id                Int       @id @default(autoincrement())
-  pathProgressId    Int
-  moduleId          Int
-  completed         Boolean   @default(false)
-  completedAt       DateTime?
-  
-  // Relasi
-  pathProgress      PathProgress @relation(fields: [pathProgressId], references: [id], onDelete: Cascade)
-  module            Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  
-  @@unique([pathProgressId, moduleId])
-  @@map("module_progresses")
-}
-
-// Tabel Certificate (Sertifikat)
-model Certificate {
-  id            Int       @id @default(autoincrement())
-  userId        Int
-  pathId        Int
-  certificateType CertificateType
-  name          String
-  issueDate     DateTime  @default(now())
-  certificateUrl String?
-  certificateId String    @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  // Relasi
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  path          Path      @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  
-  @@map("certificates")
-}
-
-// Enum untuk tipe sertifikat
 enum CertificateType {
   Member
   Buddy
 }
 
-// Tabel Event (Gabungan dari ProfessionalEvent dan CommunityEvent)
-model Event {
-  id          Int       @id @default(autoincrement())
-  title       String
-  subtitle    String?
-  category    EventCategory
-  description String?   @db.Text
-  location    String?
-  date        DateTime
-  timeStart   String
-  timeEnd     String
-  accessLevel EventAccessLevel @default(Member)
-  capacity    Int?
-  eventType   EventType
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relasi
-  attendees   EventAttendee[]
-  
-  @@map("events")
-}
-
-// Enum untuk tipe event
 enum EventType {
   Professional
   Community
 }
 
-// Enum untuk kategori event
 enum EventCategory {
   GoogleDeveloperGroups
   Scholarship
@@ -243,24 +216,7 @@ enum EventCategory {
   Exchange
 }
 
-// Enum untuk level akses event
 enum EventAccessLevel {
   Member
   MemberAndBuddy
-}
-
-// Tabel EventAttendee (Peserta Event)
-model EventAttendee {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  eventId   Int
-  rsvp      Boolean   @default(false)
-  attended  Boolean   @default(false)
-  
-  // Relasi
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, eventId])
-  @@map("event_attendees")
 }

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserAccess  } from '@prisma/client';
 import logger from '../utils/logger.js';
 
 let prisma;
@@ -63,4 +63,4 @@ const disconnectDB = async () => {
   }
 };
 
-export { prisma, connectDB, disconnectDB };
+export { prisma, UserAccess, connectDB, disconnectDB };

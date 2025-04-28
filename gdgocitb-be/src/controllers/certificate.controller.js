@@ -1,6 +1,5 @@
-import Module from '../models/Module.js';
 import { successResponse, errorResponse } from '../utils/response.js';
-import Certificate from '../models/Certificate.js';
+// import Certificate from '../models/Certificate.js';
 
 export const getCertificates = async (req, res) => {
     try {

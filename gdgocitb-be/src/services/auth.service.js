@@ -1,4 +1,4 @@
-import { prisma } from '../config/index.js';
+import { prisma, UserAccess } from '../config/index.js';
 import logger from '../utils/logger.js';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
@@ -32,7 +32,7 @@ export const checkMemberWhitelist = async (email) => {
     }
     
     // If we have an admin in database, check there too
-    const adminUser = await prisma.user.findFirst({
+    const adminUser = await prisma.users.findFirst({
       where: {
         email,
         access: {
@@ -64,7 +64,7 @@ export const loginWithGoogle = async (payload) => {
     }
     
     // Check if user exists
-    let user = await prisma.user.findUnique({
+    let user = await prisma.users.findUnique({
       where: { email }
     });
     
@@ -78,11 +78,11 @@ export const loginWithGoogle = async (payload) => {
       }
       
       // Create new user as Member
-      user = await prisma.user.create({
+      user = await prisma.users.create({
         data: {
           name,
           email,
-          access: 'Member'
+          access: UserAccess.Member
         }
       });
     }
@@ -117,23 +117,23 @@ export const registerBuddy = async (buddyData) => {
     }
     
     // Check if email is already registered as buddy
-    const existingBuddy = await prisma.user.findFirst({
+    const existingBuddy = await prisma.users.findFirst({
       where: {
         email,
-        access: 'Buddy'
+        access: UserAccess.Buddy
       }
     });
     
     if (existingBuddy) {
       throw new Error('This email is already registered as a Buddy. Please login directly.');
     }
-    
+    logger.info(`Buddy registered successfully: ${email}`);
     // Create new buddy user
-    const buddy = await prisma.user.create({
+    const buddy = await prisma.users.create({
       data: {
         name,
         email,
-        access: 'Buddy'
+        access: UserAccess.Buddy
       }
     });
     

@@ -2,7 +2,7 @@ import { loginWithGoogle, checkMemberWhitelist, registerBuddy } from '../service
 import { successResponse, errorResponse, unauthorizedResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 import { OAuth2Client } from 'google-auth-library';
-import { config, prisma } from '../config/index.js';
+import { config, prisma, UserAccess } from '../config/index.js';
 import jwt from 'jsonwebtoken';
 
 // Cookie settings yang sudah ditingkatkan
@@ -44,10 +44,11 @@ const googleAuth = async (req, res) => {
     
     if (!isMember) {
       // Check if email is registered as buddy
-      const buddy = await prisma.user.findFirst({
+      logger.info('checking if user is buddy...`);');
+      const buddy = await prisma.users.findFirst({
         where: { 
           email: payload.email, 
-          access: 'Buddy'
+          access: UserAccess.Buddy
         }
       });
       
@@ -100,7 +101,7 @@ const googleAuth = async (req, res) => {
 const registerBuddyUser = async (req, res) => {
   try {
     const { name, email } = req.body;
-    
+    logger.info(`Registering buddy: ${name}`);
     logger.info(`Registering buddy: ${email}`);
     
     // Validasi input
@@ -115,7 +116,7 @@ const registerBuddyUser = async (req, res) => {
     }
     
     // Check if email is already registered as buddy
-    const existingBuddy = await prisma.user.findFirst({
+    const existingBuddy = await prisma.users.findFirst({
       where: {
         email,
         access: 'Buddy'
@@ -127,11 +128,11 @@ const registerBuddyUser = async (req, res) => {
     }
     
     // Create new buddy user
-    const buddy = await prisma.user.create({
+    const buddy = await prisma.users.create({
       data: {
-        name,
-        email,
-        access: 'Buddy'
+        name: name,
+        email: email,
+        access: UserAccess.Buddy
       }
     });
     
@@ -212,7 +213,7 @@ const registerAdminUser = async (req, res) => {
     }
     
     // Check if email is already registered
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.users.findUnique({
       where: { email }
     });
     
@@ -221,7 +222,7 @@ const registerAdminUser = async (req, res) => {
     }
     
     // Create new admin user
-    const admin = await prisma.user.create({
+    const admin = await prisma.users.create({
       data: {
         name,
         email,
