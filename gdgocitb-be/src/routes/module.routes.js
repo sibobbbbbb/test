@@ -15,16 +15,16 @@ import {
 
 // Define routes
 // Get all modules
-router.get('/modules', protect, getModules);
+router.get('/', getModules);
 
 // Get single module
-router.get('module/:id', protect, getModule);
+router.get('/:id', protect, getModule);
 
 // Create new module - Admin only
-router.post('makeModule/', protect, authorize('Curriculum Admin'), createModule);
+router.post('/', protect, authorize('Curriculum Admin'), createModule);
 
 // Update module - Admin only
-router.put('upModule/:id', protect, authorize('Curriculum Admin'), updateModule);
+router.put('/:id', protect, authorize('Curriculum Admin'), updateModule);
 
 // Delete module - Admin only
 router.delete('delModule/:id', protect, authorize('Curriculum Admin'), deleteModule);

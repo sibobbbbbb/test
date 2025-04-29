@@ -1,4 +1,4 @@
-import { PrismaClient, UserAccess  } from '@prisma/client';
+import { PrismaClient, UserAccess } from '@prisma/client';
 import logger from '../utils/logger.js';
 
 let prisma;

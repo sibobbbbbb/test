@@ -53,3 +53,27 @@ export const createPath = async (req, res) => {
     return errorResponse(res, 500, error.message);
   }
 };
+
+export const updatePath = async (req, res) => {
+    try {
+        const { pathName, description, modules } = req.body;
+        const updatedPath = await prisma.path.update({
+        where: {
+            id: parseInt(req.params.id),
+        },
+        data: {
+            pathName,
+            description,
+            modules: modules
+            ? {
+                set: [],
+                connect: modules.map((moduleId) => ({ id: parseInt(moduleId) })),
+                }
+            : undefined,
+        },
+        });
+        return successResponse(res, 200, 'Path updated', updatedPath);
+    } catch (error) {
+        return errorResponse(res, 500, error.message);
+    }
+}

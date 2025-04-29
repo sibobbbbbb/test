@@ -8,7 +8,7 @@ import {
   getPaths, 
   getPath, 
   createPath, 
-  // updatePath, 
+  updatePath, 
   // deletePath, 
   // getPathModules
 } from '../controllers/path.controller.js';
@@ -24,9 +24,7 @@ router.get('/:id', protect, getPath);
 router.post('/', protect, authorize('Curriculum Admin'), createPath);
 
 // Update path - Admin only
-router.put('/:id', protect, authorize('Curriculum Admin'), (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+router.put('/:id', protect, authorize('Curriculum Admin'), updatePath);
 
 // Delete path - Admin only
 router.delete('/:id', protect, authorize('Curriculum Admin'), (req, res) => {
